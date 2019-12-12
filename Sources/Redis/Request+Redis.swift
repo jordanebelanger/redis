@@ -20,7 +20,7 @@ extension Request.Redis: RedisClient {
     }
 
     public func send(command: String, with arguments: [RESPValue]) -> EventLoopFuture<RESPValue> {
-        self.request.application.redis.pool.withConnection(
+        self.request.application.redis.connectionPool.withConnection(
             logger: logger,
             on: self.eventLoop
         ) {

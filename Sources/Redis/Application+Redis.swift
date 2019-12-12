@@ -6,7 +6,7 @@ extension Application {
     }
 
     public struct Redis {
-        struct ConfigurationKey: StorageKey {
+        private struct ConfigurationKey: StorageKey {
             typealias Value = RedisConfiguration
         }
 
@@ -15,22 +15,22 @@ extension Application {
                 self.application.storage[ConfigurationKey.self]
             }
             nonmutating set {
-                if self.application.storage.contains(PoolKey.self) {
+                if self.application.storage.contains(ConnectionPoolKey.self) {
                     fatalError("Cannot modify your Redis configuration after redis has been used")
                 }
                 self.application.storage[ConfigurationKey.self] = newValue
             }
         }
 
-        struct PoolKey: StorageKey, LockKey {
+        private struct ConnectionPoolKey: StorageKey, LockKey {
             typealias Value = EventLoopGroupConnectionPool<RedisConnectionSource>
         }
 
-        internal var pool: EventLoopGroupConnectionPool<RedisConnectionSource> {
-            if let existing = self.application.storage[PoolKey.self] {
+        public var connectionPool: EventLoopGroupConnectionPool<RedisConnectionSource> {
+            if let existing = self.application.storage[ConnectionPoolKey.self] {
                 return existing
             } else {
-                let lock = self.application.locks.lock(for: PoolKey.self)
+                let lock = self.application.locks.lock(for: ConnectionPoolKey.self)
                 lock.lock()
                 defer { lock.unlock() }
                 guard let configuration = self.configuration else {
@@ -42,13 +42,13 @@ extension Application {
                     logger: self.application.logger,
                     on: self.application.eventLoopGroup
                 )
-                self.application.storage.set(PoolKey.self, to: new) {
+                self.application.storage.set(ConnectionPoolKey.self, to: new) {
                     $0.shutdown()
                 }
                 return new
             }
         }
-
+        
         let application: Application
     }
 }
@@ -63,7 +63,7 @@ extension Application.Redis: RedisClient {
     }
     
     public func send(command: String, with arguments: [RESPValue]) -> EventLoopFuture<RESPValue> {
-        self.application.redis.pool.withConnection(
+        self.application.redis.connectionPool.withConnection(
             logger: logger,
             on: nil
         ) {
